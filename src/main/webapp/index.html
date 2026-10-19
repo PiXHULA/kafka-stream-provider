@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kafka Stream Provider</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { color: #333; }
+        form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        input[type="text"] { flex: 1; padding: 0.5rem; font-size: 1rem; }
+        button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
+        #status { margin-top: 0.5rem; font-size: 0.9rem; }
+        #status.error { color: red; }
+        #status.success { color: green; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+        th { background-color: #f4f4f4; }
+        #refresh { margin-left: 0.5rem; }
+    </style>
+</head>
+<body>
+    <h1>Kafka Stream Provider</h1>
+
+    <form id="messageForm">
+        <input type="text" id="messageInput" placeholder="Enter a message" required />
+        <button type="submit">Submit</button>
+    </form>
+    <div id="status"></div>
+
+    <h2>Latest Data <button id="refresh" type="button">Refresh</button></h2>
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+    </table>
+
+    <script>
+        const apiUrl = './api/data';
+        const form = document.getElementById('messageForm');
+        const input = document.getElementById('messageInput');
+        const status = document.getElementById('status');
+        const dataBody = document.getElementById('dataBody');
+        const refreshButton = document.getElementById('refresh');
+
+        async function loadData() {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to load data: ' + response.status);
+                }
+                const items = await response.json();
+                dataBody.innerHTML = '';
+                items.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    const message = typeof item === 'string' ? item : (item.message ?? JSON.stringify(item));
+                    row.innerHTML = `<td>${index + 1}</td><td>${message}</td>`;
+                    dataBody.appendChild(row);
+                });
+            } catch (err) {
+                console.log("TEST", err)
+                console.error(err);
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            status.textContent = '';
+            status.className = '';
+            const message = input.value.trim();
+            if (!message) {
+                return;
+            }
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || ('Request failed: ' + response.status));
+                }
+                status.textContent = 'Message submitted successfully.';
+                status.className = 'success';
+                input.value = '';
+                await loadData();
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+                status.className = 'error';
+            }
+        });
+
+        refreshButton.addEventListener('click', loadData);
+
+        loadData();
+    </script>
+</body>
+</html>

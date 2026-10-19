@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>se.joakimonnhage</groupId>
+    <artifactId>kafka-stream-provider</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>war</packaging>
+
+    <properties>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <jakartaee.version>10.0.0</jakartaee.version>
+        <microprofile.version>6.1</microprofile.version>
+        <kafka.version>3.7.0</kafka.version>
+        <slf4j.version>1.7.36</slf4j.version>
+    </properties>
+
+    <dependencies>
+        <!-- Jakarta EE 10 API, provided by Open Liberty at runtime -->
+        <dependency>
+            <groupId>jakarta.platform</groupId>
+            <artifactId>jakarta.jakartaee-api</artifactId>
+            <version>${jakartaee.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- MicroProfile Config API, provided by Open Liberty at runtime -->
+        <dependency>
+            <groupId>org.eclipse.microprofile</groupId>
+            <artifactId>microprofile</artifactId>
+            <version>${microprofile.version}</version>
+            <type>pom</type>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Kafka Streams + Clients, bundled into the WAR -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-streams</artifactId>
+            <version>${kafka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>${kafka.version}</version>
+        </dependency>
+
+        <!-- SLF4J binding so Kafka's internal logging (producer/consumer/streams) is routed
+             into java.util.logging, and thus into Open Liberty's messages.log/console, instead
+             of being silently dropped by the default no-op logger. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>kafka-stream-provider</finalName>
+        <resources>
+            <!-- Enable Maven property filtering so ${project.basedir} in microprofile-config.properties
+                 is replaced with the absolute repo path, regardless of the working directory Liberty
+                 actually runs the server from. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.4.0</version>
+                <configuration>
+                    <failOnMissingWebXml>false</failOnMissingWebXml>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>io.openliberty.tools</groupId>
+                <artifactId>liberty-maven-plugin</artifactId>
+                <version>3.10.2</version>
+                <configuration>
+                    <runtimeArtifact>
+                        <groupId>io.openliberty</groupId>
+                        <artifactId>openliberty-runtime</artifactId>
+                        <version>24.0.0.9</version>
+                        <type>zip</type>
+                    </runtimeArtifact>
+                    <serverName>kafkaStreamProviderServer</serverName>
+                    <configFile>src/main/liberty/config/server.xml</configFile>
+                    <looseApplication>true</looseApplication>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

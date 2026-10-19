@@ -1,0 +1,21 @@
+<server description="kafka-stream-provider server" startTimeout="120">
+
+    <featureManager>
+        <feature>restfulWS-3.1</feature>
+        <feature>cdi-4.0</feature>
+        <feature>jsonb-3.0</feature>
+        <feature>jsonp-2.1</feature>
+        <feature>mpConfig-3.1</feature>
+    </featureManager>
+
+<!--    <logging consoleLogLevel="INFO" messageFileName="messages.log" traceFileName="trace.log"/>-->
+
+    <httpEndpoint id="defaultHttpEndpoint"
+                  httpPort="9080"
+                  httpsPort="9443"
+                  host="*"/>
+
+    <webApplication location="kafka-stream-provider.war" contextRoot="/kafka_stream_provider"/>
+
+</server>
+
