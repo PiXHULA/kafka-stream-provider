@@ -10,14 +10,16 @@
     <packaging>war</packaging>
 
     <properties>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <jakartaee.version>10.0.0</jakartaee.version>
         <microprofile.version>6.1</microprofile.version>
         <kafka.version>3.7.0</kafka.version>
         <slf4j.version>1.7.36</slf4j.version>
+        <openliberty.version>24.0.0.12</openliberty.version>
+
     </properties>
 
     <dependencies>
@@ -89,7 +91,7 @@
                     <runtimeArtifact>
                         <groupId>io.openliberty</groupId>
                         <artifactId>openliberty-runtime</artifactId>
-                        <version>24.0.0.9</version>
+                        <version>${openliberty.version}</version>
                         <type>zip</type>
                     </runtimeArtifact>
                     <serverName>kafkaStreamProviderServer</serverName>

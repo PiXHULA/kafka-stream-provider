@@ -15,6 +15,14 @@
                   httpsPort="9443"
                   host="*"/>
 
+<!--    <cors domain="/"-->
+<!--          allowedOrigins="${env.allowedOrigins}"-->
+<!--          allowedMethods="GET,POST"-->
+<!--          allowCredentials="true"-->
+<!--          allowedHeaders="*"/>-->
+
+<!--    <variable name="io.openliberty.enableGraphQLUI" value="false" />-->
+
     <webApplication location="kafka-stream-provider.war" contextRoot="/kafka_stream_provider"/>
 
 </server>

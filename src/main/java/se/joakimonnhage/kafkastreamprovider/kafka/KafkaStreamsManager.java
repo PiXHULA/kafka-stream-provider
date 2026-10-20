@@ -72,8 +72,45 @@ public class KafkaStreamsManager {
 
     @PostConstruct
     void init() {
+//        stateDir = resolveStateDir(stateDir);
+//        System.out.println("stateDir: " + stateDir);
         producer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
         startStreams();
+    }
+
+    /**
+     * {@code kafka.state.dir} is normally baked in at Maven build time by filtering
+     * {@code ${project.basedir}} into an absolute path (see microprofile-config.properties).
+     * That filtering only happens when the full Maven resources lifecycle runs - some IDE
+     * "run"/"dev mode" integrations (e.g. certain Liberty Tools IntelliJ flows) deploy using
+     * a build step that copies resources verbatim, without Maven property substitution. In
+     * that case this value arrives here still containing the literal, unresolved
+     * "${project.basedir}" placeholder, which then gets treated as a real (bogus) path
+     * segment relative to Liberty's working directory - leading to confusing
+     * "file not found" style failures deep inside Kafka Streams/RocksDB.
+     *
+     * Fail fast here instead, with a clear explanation and a workaround, or fall back to the
+     * KAFKA_STATE_DIR env var / an explicit override if provided.
+     */
+    private static String resolveStateDir(String configuredStateDir) {
+        if (configuredStateDir == null || !configuredStateDir.contains("${")) {
+            return configuredStateDir;
+        }
+
+        String envOverride = System.getenv("KAFKA_STATE_DIR");
+        if (envOverride != null && !envOverride.isBlank()) {
+            LOGGER.warning("kafka.state.dir resolved to an unfiltered Maven placeholder ('"
+                    + configuredStateDir + "'), falling back to KAFKA_STATE_DIR env var: " + envOverride);
+            return envOverride;
+        }
+
+        throw new IllegalStateException(
+                "kafka.state.dir resolved to an unfiltered Maven placeholder: '" + configuredStateDir + "'. "
+                        + "This usually means the app was deployed without Maven's resource-filtering step "
+                        + "running (common with some IDE Liberty 'run'/'dev mode' integrations that copy "
+                        + "resources natively instead of invoking the Maven build). "
+                        + "Fix: set the KAFKA_STATE_DIR environment variable to an absolute path in your run "
+                        + "configuration, or run via 'mvn liberty:dev'/'mvn package' so filtering applies.");
     }
 
     @PreDestroy
