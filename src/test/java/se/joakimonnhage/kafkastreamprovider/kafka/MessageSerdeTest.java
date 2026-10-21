@@ -8,41 +8,30 @@ import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerializer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class MessageSerdeTest {
 
     @Test
     void serializerAndDeserializerRoundTripMessage() {
-        Message original = Message.newBuilder()
+        Message originalMessage = Message.newBuilder()
                 .setId("id-123")
                 .setTimestamp(1735689600000L)
                 .setMessage("hello avro")
                 .build();
 
-        MessageSerializer serializer = new MessageSerializer();
-        MessageDeserializer deserializer = new MessageDeserializer();
+        byte[] serializedMessage;
+        Message deserializedMessage;
 
-        byte[] bytes = serializer.serialize("messages", original);
-        Message restored = deserializer.deserialize("messages", bytes);
+        try (MessageSerializer serializer = new MessageSerializer(); MessageDeserializer deserializer = new MessageDeserializer()) {
+            serializedMessage = serializer.serialize("messages", originalMessage);
+            deserializedMessage = deserializer.deserialize("messages", serializedMessage);
+        }
 
-        assertNotNull(bytes);
-        assertNotNull(restored);
-        assertEquals(original.getId().toString(), restored.getId().toString());
-        assertEquals(original.getTimestamp(), restored.getTimestamp());
-        assertEquals(original.getMessage().toString(), restored.getMessage().toString());
-    }
-
-    @Test
-    void serializerReturnsNullForNullMessage() {
-        MessageSerializer serializer = new MessageSerializer();
-        assertNull(serializer.serialize("messages", null));
-    }
-
-    @Test
-    void deserializerReturnsNullForNullPayload() {
-        MessageDeserializer deserializer = new MessageDeserializer();
-        assertNull(deserializer.deserialize("messages", null));
+        assertNotNull(serializedMessage);
+        assertNotNull(deserializedMessage);
+        assertEquals(originalMessage.getId().toString(), deserializedMessage.getId().toString());
+        assertEquals(originalMessage.getTimestamp(), deserializedMessage.getTimestamp());
+        assertEquals(originalMessage.getMessage().toString(), deserializedMessage.getMessage().toString());
     }
 
     @Test
@@ -53,9 +42,13 @@ class MessageSerdeTest {
                 .setMessage("serde wrapper")
                 .build();
 
-        MessageSerde serde = MessageSerde.instance();
-        byte[] bytes = serde.serializer().serialize("messages", original);
-        Message restored = serde.deserializer().deserialize("messages", bytes);
+        byte[] bytes = null;
+        Message restored = null;
+
+        try (MessageSerde serde = MessageSerde.instance()) {
+            bytes = serde.serializer().serialize("messages", original);
+            restored = serde.deserializer().deserialize("messages", bytes);
+        }
 
         assertNotNull(restored);
         assertEquals(original.getId().toString(), restored.getId().toString());

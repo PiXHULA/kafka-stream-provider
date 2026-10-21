@@ -24,6 +24,7 @@
         <jackson.version>2.16.0</jackson.version>
         <maven.enforcer.version>3.5.0</maven.enforcer.version>
         <junit.version>5.11.3</junit.version>
+        <mockito.version>5.20.0</mockito.version>
 
     </properties>
 
@@ -98,6 +99,21 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Mockito, used to unit test classes that depend on Kafka's KafkaProducer/KafkaStreams
+             runtime objects without needing a live broker. -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
