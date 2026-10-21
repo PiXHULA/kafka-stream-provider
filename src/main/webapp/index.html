@@ -33,6 +33,7 @@
             <tr>
                 <th>#</th>
                 <th>Message</th>
+                <th>Time</th>
             </tr>
         </thead>
         <tbody id="dataBody"></tbody>
@@ -58,15 +59,29 @@
                 const items = await response.json();
                 dataBody.innerHTML = '';
                 items.forEach((item, index) => {
+                    console.log("ITEM: ", item);
                     const row = document.createElement('tr');
                     const message = typeof item === 'string' ? item : (item.message ?? JSON.stringify(item));
-                    row.innerHTML = `<td>${index + 1}</td><td>${message}</td>`;
+                    const formattedDate = createDate(item.timestamp);
+                    row.innerHTML = `<td>${index + 1}</td><td>${message}</td><td>${formattedDate}</td>`;
                     dataBody.appendChild(row);
                 });
             } catch (err) {
                 console.log("TEST", err)
                 console.error(err);
             }
+        }
+        function createDate(timestamp) {
+            let unix_timestamp = timestamp;
+
+            var date = new Date(unix_timestamp * 1000);
+
+            var hours = date.getHours();
+            var minutes = "0" + date.getMinutes();
+            var seconds = "0" + date.getSeconds();
+
+            var formattedTime = hours + ':' + minutes.substr(-2) + ':' + seconds.substr(-2);
+            return formattedTime;
         }
 
         form.addEventListener('submit', async (e) => {

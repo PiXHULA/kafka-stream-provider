@@ -15,7 +15,6 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StoreQueryParameters;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Materialized;
@@ -36,7 +35,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jakarta.inject.Inject;
+import se.joakimonnhage.kafkastreamprovider.avro.Message;
 import se.joakimonnhage.kafkastreamprovider.dto.StoredMessage;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
 
 /**
  * Owns the lifecycle of the Kafka Streams topology and a producer used to feed it.
@@ -67,15 +68,24 @@ public class KafkaStreamsManager {
     @ConfigProperty(name = "kafka.state.dir")
     String stateDir;
 
-    private KafkaProducer<String, String> producer;
+    private KafkaProducer<String, Message> producer;
     private KafkaStreams streams;
 
     @PostConstruct
     void init() {
 //        stateDir = resolveStateDir(stateDir);
 //        System.out.println("stateDir: " + stateDir);
-        producer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
-        startStreams();
+        try {
+            producer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
+            startStreams();
+        } catch (RuntimeException | Error e) {
+            // CDI/Weld swallows the real cause behind a generic "WELD-000049: Unable to invoke
+            // void ...init()" message - log the actual exception (e.g. missing/incompatible Avro
+            // classes, bad Kafka config, etc.) here so it's visible, then rethrow so startup still
+            // fails loudly.
+            LOGGER.log(Level.SEVERE, "KafkaStreamsManager initialization failed", e);
+            throw e;
+        }
     }
 
     /**
@@ -124,11 +134,18 @@ public class KafkaStreamsManager {
     }
 
     /**
-     * Sends a new piece of data onto the input topic under a fresh random key, so that it
-     * is accumulated (rather than overwritten) in the materialized state store.
+     * Sends a new piece of data onto the input topic as an Avro {@link Message} (id, timestamp,
+     * message), under a fresh random id used both as the Kafka record key and the message's own
+     * id field, so that it is accumulated (rather than overwritten) in the materialized state store.
      */
-    public void produce(String message) {
+    public void produce(String messageText) {
         String key = UUID.randomUUID().toString();
+        long timestamp = System.currentTimeMillis();
+        Message message = Message.newBuilder()
+                .setId(key)
+                .setTimestamp(timestamp)
+                .setMessage(messageText)
+                .build();
         LOGGER.info("Producing message key=" + key + " to topic " + topic);
         try {
             producer.send(new ProducerRecord<>(topic, key, message), (metadata, exception) -> {
@@ -154,12 +171,17 @@ public class KafkaStreamsManager {
      */
     public List<StoredMessage> readAll() {
         List<StoredMessage> result = new ArrayList<>();
-        ReadOnlyKeyValueStore<String, String> store = streams.store(
+        ReadOnlyKeyValueStore<String, Message> store = streams.store(
                 StoreQueryParameters.fromNameAndType(STORE_NAME, QueryableStoreTypes.keyValueStore()));
-        try (KeyValueIterator<String, String> iterator = store.all()) {
+        try (KeyValueIterator<String, Message> iterator = store.all()) {
             while (iterator.hasNext()) {
                 var entry = iterator.next();
-                result.add(new StoredMessage(entry.key, entry.value));
+                Message value = entry.value;
+                result.add(new StoredMessage(
+                        entry.key,
+                        value.getId() == null ? null : value.getId().toString(),
+                        value.getTimestamp(),
+                        value.getMessage() == null ? null : value.getMessage().toString()));
             }
         }
         return result;
@@ -199,10 +221,10 @@ public class KafkaStreamsManager {
         StreamsBuilder builder = new StreamsBuilder();
         builder.table(
                 topic,
-                Consumed.with(Serdes.String(), Serdes.String()),
-                Materialized.<String, String, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(STORE_NAME)
+                Consumed.with(Serdes.String(), MessageSerde.instance()),
+                Materialized.<String, Message, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(STORE_NAME)
                         .withKeySerde(Serdes.String())
-                        .withValueSerde(Serdes.String()));
+                        .withValueSerde(MessageSerde.instance()));
 
         Topology topology = builder.build();
         Properties props = KafkaPropertiesFactory.streamsProps(bootstrapServers, applicationId, stateDir);

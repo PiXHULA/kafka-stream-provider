@@ -5,6 +5,8 @@ import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.streams.StreamsConfig;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerializer;
 
 import java.util.Properties;
 
@@ -22,7 +24,7 @@ final class KafkaPropertiesFactory {
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, applicationId);
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, "org.apache.kafka.common.serialization.Serdes$StringSerde");
-        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, "org.apache.kafka.common.serialization.Serdes$StringSerde");
+        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, MessageSerde.class.getName());
         // Kafka Streams itself creates a per-application-id subdirectory under this path
         // (state.dir/application.id/...) - do NOT append applicationId here too, or you end up
         // with a doubled-up path like .../kafka-stream-provider-app/kafka-stream-provider-app.
@@ -35,7 +37,7 @@ final class KafkaPropertiesFactory {
         Properties props = new Properties();
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, MessageSerializer.class.getName());
         return props;
     }
 

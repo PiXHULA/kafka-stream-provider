@@ -12,6 +12,7 @@
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <jakartaee.version>10.0.0</jakartaee.version>
@@ -19,6 +20,10 @@
         <kafka.version>3.7.0</kafka.version>
         <slf4j.version>1.7.36</slf4j.version>
         <openliberty.version>24.0.0.12</openliberty.version>
+        <avro.version>1.11.3</avro.version>
+        <jackson.version>2.16.0</jackson.version>
+        <maven.enforcer.version>3.5.0</maven.enforcer.version>
+        <junit.version>5.11.3</junit.version>
 
     </properties>
 
@@ -52,6 +57,34 @@
             <version>${kafka.version}</version>
         </dependency>
 
+        <!-- Avro, used to (de)serialize the Kafka message payload (id, timestamp, message).
+             No schema registry is deployed in this project's docker-compose, so plain binary
+             Avro (via hand-rolled Serializer/Deserializer) is used instead of Confluent's
+             KafkaAvroSerializer. -->
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>${avro.version}</version>
+        </dependency>
+
+        <!-- Keep jackson-core/annotations/databind on the same version to avoid classpath
+             mismatches (e.g. databind requiring classes missing from an older core jar). -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
         <!-- SLF4J binding so Kafka's internal logging (producer/consumer/streams) is routed
              into java.util.logging, and thus into Open Liberty's messages.log/console, instead
              of being silently dropped by the default no-op logger. -->
@@ -60,7 +93,28 @@
             <artifactId>slf4j-jdk14</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <!-- Plugins (e.g. avro-maven-plugin) are resolved from Maven Central by default, which isn't
+         reachable directly from this network - mirror plugin resolution through the same internal
+         Artifactory "central" proxy repository configured in settings.xml for dependencies. -->
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <name>central-maven-org</name>
+            <url>https://repo7.sebank.se/artifactory/maven-org/</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
     <build>
         <finalName>kafka-stream-provider</finalName>
@@ -76,11 +130,110 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven.enforcer.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-build-rules</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[3.9.0,)</version>
+                                    <message>Maven 3.9+ is required for this project.</message>
+                                </requireMavenVersion>
+                                <requireProperty>
+                                    <property>maven.compiler.release</property>
+                                    <regex>21</regex>
+                                    <message>maven.compiler.release must stay at 21 (Liberty compatibility).</message>
+                                </requireProperty>
+                                <requireProperty>
+                                    <property>maven.compiler.source</property>
+                                    <regex>21</regex>
+                                    <message>maven.compiler.source must stay at 21 (Liberty compatibility).</message>
+                                </requireProperty>
+                                <requireProperty>
+                                    <property>maven.compiler.target</property>
+                                    <regex>21</regex>
+                                    <message>maven.compiler.target must stay at 21 (Liberty compatibility).</message>
+                                </requireProperty>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro-maven-plugin</artifactId>
+                <version>${avro.version}</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>schema</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectory>${project.basedir}/src/main/avro</sourceDirectory>
+                            <outputDirectory>${project.build.directory}/generated-sources/avro</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Explicitly (rather than relying on IDE heuristics) register the Avro-generated
+                 sources as a compile source root, so IntelliJ's own "Make"/exploded-artifact build
+                 (used by Liberty Tools run configurations, which does NOT go through this pom's
+                 Maven lifecycle at run time) reliably sees the generated se.joakimonnhage...avro.Message
+                 class too - not just plain `mvn compile`. After adding/changing this, re-import the
+                 Maven project in IntelliJ (Maven panel -> Reload All Maven Projects) so it picks up
+                 the new source root and plugin-provided avro.jar dependency. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>add-avro-generated-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/avro</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-war-plugin</artifactId>
                 <version>3.4.0</version>
                 <configuration>
                     <failOnMissingWebXml>false</failOnMissingWebXml>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
 
             <plugin>

@@ -1,0 +1,12 @@
+{
+  "namespace": "se.joakimonnhage.kafkastreamprovider.avro",
+  "type": "record",
+  "name": "Message",
+  "doc": "A single message produced onto the input topic, carrying a unique id, the production timestamp, and the message text.",
+  "fields": [
+    { "name": "id", "type": "string", "doc": "Unique identifier for this message (used as the Kafka record key too)." },
+    { "name": "timestamp", "type": "long", "doc": "Epoch millis at the time the message was produced." },
+    { "name": "message", "type": "string", "doc": "The actual message payload/text." }
+  ]
+}
+
