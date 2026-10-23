@@ -18,7 +18,7 @@ import java.util.List;
  * Lets you submit new data onto the Kafka topic, and read back everything the
  * Kafka Streams app has consumed from it so far.
  */
-@Path("/data")
+@Path("/messages")
 public class DataResource {
 
     @Inject
