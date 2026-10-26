@@ -4,18 +4,19 @@
     <meta charset="UTF-8">
     <title>Kafka Stream Provider</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
         h1 { color: #333; }
-        form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        h2 { margin-top: 2rem; }
+        form { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
         input[type="text"] { flex: 1; padding: 0.5rem; font-size: 1rem; }
         button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; }
-        #status { margin-top: 0.5rem; font-size: 0.9rem; }
-        #status.error { color: red; }
-        #status.success { color: green; }
+        .status { margin-bottom: 1rem; font-size: 0.9rem; min-height: 1.2rem; }
+        .status.error { color: red; }
+        .status.success { color: green; }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
         th { background-color: #f4f4f4; }
-        #refresh { margin-left: 0.5rem; }
+        .refresh { margin-left: 0.5rem; }
     </style>
 </head>
 <body>
@@ -23,12 +24,12 @@
 
     <form id="messageForm">
         <input type="text" id="messageInput" placeholder="Enter a message" required />
-        <button type="submit">Submit</button>
+        <button type="submit">Submit Message</button>
     </form>
-    <div id="status"></div>
+    <div id="messageStatus" class="status"></div>
 
-    <h2>Latest Data <button id="refresh" type="button">Refresh</button></h2>
-    <table id="dataTable">
+    <h2>Messages <button id="refreshMessages" class="refresh" type="button">Refresh</button></h2>
+    <table id="messageTable">
         <thead>
             <tr>
                 <th>#</th>
@@ -36,64 +37,122 @@
                 <th>Time</th>
             </tr>
         </thead>
-        <tbody id="dataBody"></tbody>
+        <tbody id="messageBody"></tbody>
+    </table>
+
+    <h2>Members</h2>
+    <form id="memberForm">
+        <input type="text" id="memberUsernameInput" placeholder="Enter a username" required />
+        <button type="submit">Add Member</button>
+    </form>
+    <div id="memberStatus" class="status"></div>
+
+    <h2>Member List <button id="refreshMembers" class="refresh" type="button">Refresh</button></h2>
+    <table id="memberTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Username</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody id="memberBody"></tbody>
     </table>
 
     <script>
-        const apiUrl = './api/data';
-        const form = document.getElementById('messageForm');
-        const input = document.getElementById('messageInput');
-        const status = document.getElementById('status');
-        const dataBody = document.getElementById('dataBody');
-        const refreshButton = document.getElementById('refresh');
+        const messageApiUrl = './api/messages';
+        const memberApiUrl = './api/members';
 
-        async function loadData() {
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const messageStatus = document.getElementById('messageStatus');
+        const messageBody = document.getElementById('messageBody');
+        const refreshMessagesButton = document.getElementById('refreshMessages');
+
+        const memberForm = document.getElementById('memberForm');
+        const memberUsernameInput = document.getElementById('memberUsernameInput');
+        const memberStatus = document.getElementById('memberStatus');
+        const memberBody = document.getElementById('memberBody');
+        const refreshMembersButton = document.getElementById('refreshMembers');
+
+        async function loadMessages() {
             try {
-                const response = await fetch(apiUrl, {
+                const response = await fetch(messageApiUrl, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' }
                 });
                 if (!response.ok) {
-                    throw new Error('Failed to load data: ' + response.status);
+                    throw new Error('Failed to load messages: ' + response.status);
                 }
                 const items = await response.json();
-                dataBody.innerHTML = '';
+                messageBody.innerHTML = '';
                 items.forEach((item, index) => {
-                    console.log("ITEM: ", item);
-                    const row = document.createElement('tr');
-                    const message = typeof item === 'string' ? item : (item.message ?? JSON.stringify(item));
-                    const formattedDate = createDate(item.timestamp);
-                    row.innerHTML = `<td>${index + 1}</td><td>${message}</td><td>${formattedDate}</td>`;
-                    dataBody.appendChild(row);
+                    appendRow(messageBody, [
+                        String(index + 1),
+                        typeof item === 'string' ? item : (item.message ?? JSON.stringify(item)),
+                        formatTimestamp(item.timestamp)
+                    ]);
                 });
             } catch (err) {
-                console.log("TEST", err)
                 console.error(err);
             }
         }
-        function createDate(timestamp) {
-            let unix_timestamp = timestamp;
 
-            var date = new Date(unix_timestamp * 1000);
-
-            var hours = date.getHours();
-            var minutes = "0" + date.getMinutes();
-            var seconds = "0" + date.getSeconds();
-
-            var formattedTime = hours + ':' + minutes.substr(-2) + ':' + seconds.substr(-2);
-            return formattedTime;
+        async function loadMembers() {
+            try {
+                const response = await fetch(memberApiUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to load members: ' + response.status);
+                }
+                const items = await response.json();
+                memberBody.innerHTML = '';
+                items.forEach((item, index) => {
+                    appendRow(memberBody, [
+                        String(index + 1),
+                        item.username ?? '',
+                        formatTimestamp(item.createdTimestamp)
+                    ]);
+                });
+            } catch (err) {
+                console.error(err);
+            }
         }
 
-        form.addEventListener('submit', async (e) => {
+        function appendRow(tableBody, values) {
+            const row = document.createElement('tr');
+            values.forEach((value) => {
+                const td = document.createElement('td');
+                td.textContent = value;
+                row.appendChild(td);
+            });
+            tableBody.appendChild(row);
+        }
+
+        function formatTimestamp(timestamp) {
+            if (timestamp === undefined || timestamp === null) {
+                return '';
+            }
+            const date = new Date(Number(timestamp));
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            return date.toLocaleString();
+        }
+
+        messageForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            status.textContent = '';
-            status.className = '';
-            const message = input.value.trim();
+            messageStatus.textContent = '';
+            messageStatus.className = 'status';
+
+            const message = messageInput.value.trim();
             if (!message) {
                 return;
             }
             try {
-                const response = await fetch(apiUrl, {
+                const response = await fetch(messageApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message })
@@ -102,19 +161,50 @@
                     const text = await response.text();
                     throw new Error(text || ('Request failed: ' + response.status));
                 }
-                status.textContent = 'Message submitted successfully.';
-                status.className = 'success';
-                input.value = '';
-                await loadData();
+                messageStatus.textContent = 'Message submitted successfully.';
+                messageStatus.className = 'status success';
+                messageInput.value = '';
+                await loadMessages();
             } catch (err) {
-                status.textContent = 'Error: ' + err.message;
-                status.className = 'error';
+                messageStatus.textContent = 'Error: ' + err.message;
+                messageStatus.className = 'status error';
             }
         });
 
-        refreshButton.addEventListener('click', loadData);
+        memberForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            memberStatus.textContent = '';
+            memberStatus.className = 'status';
 
-        loadData();
+            const username = memberUsernameInput.value.trim();
+            if (!username) {
+                return;
+            }
+            try {
+                const response = await fetch(memberApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || ('Request failed: ' + response.status));
+                }
+                memberStatus.textContent = 'Member submitted successfully.';
+                memberStatus.className = 'status success';
+                memberUsernameInput.value = '';
+                await loadMembers();
+            } catch (err) {
+                memberStatus.textContent = 'Error: ' + err.message;
+                memberStatus.className = 'status error';
+            }
+        });
+
+        refreshMessagesButton.addEventListener('click', loadMessages);
+        refreshMembersButton.addEventListener('click', loadMembers);
+
+        loadMessages();
+        loadMembers();
     </script>
 </body>
 </html>
