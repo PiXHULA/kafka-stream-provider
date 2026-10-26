@@ -9,6 +9,7 @@ import org.apache.kafka.streams.StreamsConfig;
 import org.junit.jupiter.api.Test;
 import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
 import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerializer;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MemberSerializer;
 
 import java.nio.file.Paths;
 import java.util.Properties;
@@ -48,6 +49,15 @@ class KafkaPropertiesFactoryTest {
         assertEquals("localhost:9092", props.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG));
         assertEquals(StringSerializer.class.getName(), props.get(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG));
         assertEquals(MessageSerializer.class.getName(), props.get(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG));
+    }
+
+    @Test
+    void memberProducerPropsContainsExpectedConfig() {
+        Properties props = KafkaPropertiesFactory.memberProducerProps("localhost:9092");
+
+        assertEquals("localhost:9092", props.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG));
+        assertEquals(StringSerializer.class.getName(), props.get(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG));
+        assertEquals(MemberSerializer.class.getName(), props.get(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG));
     }
 
     @Test

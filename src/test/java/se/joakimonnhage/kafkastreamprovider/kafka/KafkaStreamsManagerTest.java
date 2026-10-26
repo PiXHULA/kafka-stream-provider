@@ -14,7 +14,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import se.joakimonnhage.kafkastreamprovider.avro.Member;
 import se.joakimonnhage.kafkastreamprovider.avro.Message;
+import se.joakimonnhage.kafkastreamprovider.dto.StoredMember;
 import se.joakimonnhage.kafkastreamprovider.dto.StoredMessage;
 
 import java.lang.reflect.Field;
@@ -42,21 +44,32 @@ class KafkaStreamsManagerTest {
     private KafkaProducer<String, Message> producer;
 
     @Mock
+    private KafkaProducer<String, Member> memberProducer;
+
+    @Mock
     private KafkaStreams streams;
 
     @Mock
     private ReadOnlyKeyValueStore<String, Message> store;
 
+    @Mock
+    private ReadOnlyKeyValueStore<String, Member> memberStore;
+
     @Captor
     ArgumentCaptor<ProducerRecord<String, Message>> captor;
+
+    @Captor
+    ArgumentCaptor<ProducerRecord<String, Member>> memberCaptor;
 
     private KafkaStreamsManager manager;
 
     @BeforeEach
     void setUp() throws Exception {
         manager = new KafkaStreamsManager();
-        manager.topic = "messages";
-        setPrivateField(manager, "producer", producer);
+        manager.messageTopic = "new-message-test-topic";
+        manager.memberTopic = "new-member-test-topic";
+        setPrivateField(manager, "messageProducer", producer);
+        setPrivateField(manager, "memberProducer", memberProducer);
         setPrivateField(manager, "streams", streams);
     }
 
@@ -68,7 +81,7 @@ class KafkaStreamsManagerTest {
         verify(producer).flush();
 
         ProducerRecord<String, Message> record = captor.getValue();
-        assertEquals("messages", record.topic());
+        assertEquals("new-message-test-topic", record.topic());
         assertNotNull(record.key());
 
         Message value = record.value();
@@ -82,7 +95,33 @@ class KafkaStreamsManagerTest {
         when(producer.send(any(), any())).thenThrow(new KafkaException("boom"));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () -> manager.produce("hello"));
-        assertTrue(ex.getMessage().contains("messages"));
+        assertTrue(ex.getMessage().contains("new-message-test-topic"));
+        assertInstanceOf(KafkaException.class, ex.getCause());
+    }
+
+    @Test
+    void produceMemberSendsAvroMemberBuiltFromUsernameAndFlushes() {
+        manager.produceMember("alice");
+
+        verify(memberProducer).send(memberCaptor.capture(), any());
+        verify(memberProducer).flush();
+
+        ProducerRecord<String, Member> record = memberCaptor.getValue();
+        assertEquals("new-member-test-topic", record.topic());
+        assertNotNull(record.key());
+
+        Member value = record.value();
+        assertEquals(record.key(), value.getId().toString());
+        assertEquals("alice", value.getUsername().toString());
+        assertTrue(value.getCreatedTimestamp() > 0);
+    }
+
+    @Test
+    void produceMemberWrapsSynchronousSendFailureInRuntimeException() {
+        when(memberProducer.send(any(), any())).thenThrow(new KafkaException("boom"));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> manager.produceMember("alice"));
+        assertTrue(ex.getMessage().contains("new-member-test-topic"));
         assertInstanceOf(KafkaException.class, ex.getCause());
     }
 
@@ -123,6 +162,42 @@ class KafkaStreamsManagerTest {
     }
 
     @Test
+    void readAllMembersReturnsEveryEntryFromTheMemberStateStore() {
+        Member m1 = Member.newBuilder().setId("id-1").setUsername("alice").setCreatedTimestamp(1L).build();
+        Member m2 = Member.newBuilder().setId("id-2").setUsername("bob").setCreatedTimestamp(2L).build();
+
+        KeyValueIterator<String, Member> iterator = mockIterator(List.of(
+                new KeyValue<>("key-1", m1),
+                new KeyValue<>("key-2", m2)
+        ));
+
+        when(streams.store(any())).thenReturn(memberStore);
+        when(memberStore.all()).thenReturn(iterator);
+
+        List<StoredMember> result = manager.readAllMembers();
+
+        assertEquals(2, result.size());
+        assertEquals("key-1", result.getFirst().key);
+        assertEquals("id-1", result.getFirst().id);
+        assertEquals("alice", result.getFirst().username);
+        assertEquals(1L, result.getFirst().createdTimestamp);
+        assertEquals("key-2", result.get(1).key);
+        assertEquals("id-2", result.get(1).id);
+        assertEquals("bob", result.get(1).username);
+        assertEquals(2L, result.get(1).createdTimestamp);
+    }
+
+    @Test
+    void readAllMembersReturnsEmptyListWhenStoreIsEmpty() {
+        KeyValueIterator<String, Member> iterator = mockIterator(List.of());
+
+        when(streams.store(any())).thenReturn(memberStore);
+        when(memberStore.all()).thenReturn(iterator);
+
+        assertTrue(manager.readAllMembers().isEmpty());
+    }
+
+    @Test
     void resolveStateDirReturnsValueUnchangedWhenNoPlaceholderPresent() throws Exception {
         Object result = invokeResolveStateDir("/absolute/state-dir");
         assertEquals("/absolute/state-dir", result);
@@ -151,8 +226,8 @@ class KafkaStreamsManagerTest {
      * {@code store.all()}.
      */
     @SuppressWarnings("unchecked")
-    private static KeyValueIterator<String, Message> mockIterator(List<KeyValue<String, Message>> entries) {
-        KeyValueIterator<String, Message> iterator = mock(KeyValueIterator.class);
+    private static <T> KeyValueIterator<String, T> mockIterator(List<KeyValue<String, T>> entries) {
+        KeyValueIterator<String, T> iterator = mock(KeyValueIterator.class);
 
         Boolean[] hasNextAnswers = new Boolean[entries.size() + 1];
         Arrays.fill(hasNextAnswers, Boolean.TRUE);
@@ -160,7 +235,7 @@ class KafkaStreamsManagerTest {
         when(iterator.hasNext()).thenReturn(hasNextAnswers[0], Arrays.copyOfRange(hasNextAnswers, 1, hasNextAnswers.length));
 
         if (!entries.isEmpty()) {
-            KeyValue<String, Message>[] rest = entries.subList(1, entries.size()).toArray(new KeyValue[0]);
+            KeyValue<String, T>[] rest = entries.subList(1, entries.size()).toArray(new KeyValue[0]);
             when(iterator.next()).thenReturn(entries.get(0), rest);
         }
 
