@@ -35,8 +35,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jakarta.inject.Inject;
+import se.joakimonnhage.kafkastreamprovider.avro.Member;
 import se.joakimonnhage.kafkastreamprovider.avro.Message;
+import se.joakimonnhage.kafkastreamprovider.dto.StoredMember;
 import se.joakimonnhage.kafkastreamprovider.dto.StoredMessage;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MemberSerde;
 import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
 
 /**
@@ -50,15 +53,20 @@ import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
 public class KafkaStreamsManager {
 
     private static final Logger LOGGER = Logger.getLogger(KafkaStreamsManager.class.getName());
-    private static final String STORE_NAME = "messages-store";
+    private static final String MESSAGE_STORE_NAME = "messages-store";
+    private static final String MEMBER_STORE_NAME = "members-store";
 
     @Inject
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
     @Inject
-    @ConfigProperty(name = "kafka.topic")
-    String topic;
+    @ConfigProperty(name = "kafka.message.topic")
+    String messageTopic;
+
+    @Inject
+    @ConfigProperty(name = "kafka.member.topic")
+    String memberTopic;
 
     @Inject
     @ConfigProperty(name = "kafka.application.id")
@@ -68,7 +76,8 @@ public class KafkaStreamsManager {
     @ConfigProperty(name = "kafka.state.dir")
     String stateDir;
 
-    private KafkaProducer<String, Message> producer;
+    private KafkaProducer<String, Message> messageProducer;
+    private KafkaProducer<String, Member> memberProducer;
     private KafkaStreams streams;
 
     @PostConstruct
@@ -76,8 +85,9 @@ public class KafkaStreamsManager {
 //        stateDir = resolveStateDir(stateDir);
 //        System.out.println("stateDir: " + stateDir);
         try {
-            producer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
-            startStreams();
+            this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
+            this.memberProducer = new KafkaProducer<>(KafkaPropertiesFactory.memberProducerProps(bootstrapServers));
+            this.startStreams();
         } catch (RuntimeException | Error e) {
             // CDI/Weld swallows the real cause behind a generic "WELD-000049: Unable to invoke
             // void ...init()" message - log the actual exception (e.g. missing/incompatible Avro
@@ -128,8 +138,11 @@ public class KafkaStreamsManager {
         if (streams != null) {
             streams.close(Duration.ofSeconds(10));
         }
-        if (producer != null) {
-            producer.close(Duration.ofSeconds(10));
+        if (messageProducer != null) {
+            messageProducer.close(Duration.ofSeconds(10));
+        }
+        if (memberProducer != null) {
+            memberProducer.close(Duration.ofSeconds(10));
         }
     }
 
@@ -146,22 +159,51 @@ public class KafkaStreamsManager {
                 .setTimestamp(timestamp)
                 .setMessage(messageText)
                 .build();
-        LOGGER.info("Producing message key=" + key + " to topic " + topic);
+        LOGGER.info("Producing message key=" + key + " to topic " + messageTopic);
         try {
-            producer.send(new ProducerRecord<>(topic, key, message), (metadata, exception) -> {
+            messageProducer.send(new ProducerRecord<>(messageTopic, key, message), (metadata, exception) -> {
                 if (exception != null) {
-                    LOGGER.log(Level.SEVERE, "Failed to send message to topic " + topic, exception);
+                    LOGGER.log(Level.SEVERE, "Failed to send message to topic " + messageTopic, exception);
                 } else {
                     LOGGER.info("Produced message key=" + key + " partition=" + metadata.partition()
                             + " offset=" + metadata.offset());
                 }
             });
-            producer.flush();
+            messageProducer.flush();
         } catch (Exception e) {
             // send()/flush() can also fail synchronously (e.g. metadata/timeout, serialization,
             // buffer exhaustion) before the async callback above ever runs - make sure that's logged too.
-            LOGGER.log(Level.SEVERE, "Failed to send message (synchronously) to topic " + topic, e);
-            throw new RuntimeException("Failed to send message to topic " + topic, e);
+            LOGGER.log(Level.SEVERE, "Failed to send message (synchronously) to topic " + messageTopic, e);
+            throw new RuntimeException("Failed to send message to topic " + messageTopic, e);
+        }
+    }
+
+    /**
+     * Sends a new member onto the dedicated member topic as an Avro {@link Member}
+     * under a fresh random id.
+     */
+    public void produceMember(String username) {
+        String key = UUID.randomUUID().toString();
+        long createdTimestamp = System.currentTimeMillis();
+        Member member = Member.newBuilder()
+                .setId(key)
+                .setUsername(username)
+                .setCreatedTimestamp(createdTimestamp)
+                .build();
+        LOGGER.info("Producing member key=" + key + " to topic " + memberTopic);
+        try {
+            memberProducer.send(new ProducerRecord<>(memberTopic, key, member), (metadata, exception) -> {
+                if (exception != null) {
+                    LOGGER.log(Level.SEVERE, "Failed to send member to topic " + memberTopic, exception);
+                } else {
+                    LOGGER.info("Produced member key=" + key + " partition=" + metadata.partition()
+                            + " offset=" + metadata.offset());
+                }
+            });
+            memberProducer.flush();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to send member (synchronously) to topic " + memberTopic, e);
+            throw new RuntimeException("Failed to send member to topic " + memberTopic, e);
         }
     }
 
@@ -172,7 +214,7 @@ public class KafkaStreamsManager {
     public List<StoredMessage> readAll() {
         List<StoredMessage> result = new ArrayList<>();
         ReadOnlyKeyValueStore<String, Message> store = streams.store(
-                StoreQueryParameters.fromNameAndType(STORE_NAME, QueryableStoreTypes.keyValueStore()));
+                StoreQueryParameters.fromNameAndType(MESSAGE_STORE_NAME, QueryableStoreTypes.keyValueStore()));
         try (KeyValueIterator<String, Message> iterator = store.all()) {
             while (iterator.hasNext()) {
                 var entry = iterator.next();
@@ -182,6 +224,27 @@ public class KafkaStreamsManager {
                         value.getId() == null ? null : value.getId().toString(),
                         value.getTimestamp(),
                         value.getMessage() == null ? null : value.getMessage().toString()));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Reads every member currently materialized in the member state store.
+     */
+    public List<StoredMember> readAllMembers() {
+        List<StoredMember> result = new ArrayList<>();
+        ReadOnlyKeyValueStore<String, Member> store = streams.store(
+                StoreQueryParameters.fromNameAndType(MEMBER_STORE_NAME, QueryableStoreTypes.keyValueStore()));
+        try (KeyValueIterator<String, Member> iterator = store.all()) {
+            while (iterator.hasNext()) {
+                var entry = iterator.next();
+                Member value = entry.value;
+                result.add(new StoredMember(
+                        entry.key,
+                        value.getId() == null ? null : value.getId().toString(),
+                        value.getUsername() == null ? null : value.getUsername().toString(),
+                        value.getCreatedTimestamp()));
             }
         }
         return result;
@@ -199,16 +262,18 @@ public class KafkaStreamsManager {
 
         try (AdminClient admin = AdminClient.create(KafkaPropertiesFactory.adminProps(bootstrapServers))) {
             Map<String, KafkaFuture<TopicDescription>> descriptions =
-                    admin.describeTopics(List.of(topic)).topicNameValues();
-            TopicDescription description = descriptions.get(topic).get();
+                    admin.describeTopics(List.of(messageTopic, memberTopic)).topicNameValues();
 
             Map<TopicPartition, OffsetAndMetadata> resetMap = new HashMap<>();
-            for (TopicPartitionInfo partitionInfo : description.partitions()) {
-                resetMap.put(new TopicPartition(topic, partitionInfo.partition()), new OffsetAndMetadata(0));
+            for (Map.Entry<String, KafkaFuture<TopicDescription>> entry : descriptions.entrySet()) {
+                TopicDescription description = entry.getValue().get();
+                for (TopicPartitionInfo partitionInfo : description.partitions()) {
+                    resetMap.put(new TopicPartition(entry.getKey(), partitionInfo.partition()), new OffsetAndMetadata(0));
+                }
             }
 
             admin.alterConsumerGroupOffsets(applicationId, resetMap).all().get();
-            LOGGER.info("Offsets for group " + applicationId + " reset to 0 for topic " + topic);
+            LOGGER.info("Offsets for group " + applicationId + " reset to 0 for topics " + messageTopic + " and " + memberTopic);
         } catch (Exception e) {
             throw new RuntimeException("Failed to reset consumer group offsets", e);
         }
@@ -220,11 +285,17 @@ public class KafkaStreamsManager {
     private void startStreams() {
         StreamsBuilder builder = new StreamsBuilder();
         builder.table(
-                topic,
+                messageTopic,
                 Consumed.with(Serdes.String(), MessageSerde.instance()),
-                Materialized.<String, Message, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(STORE_NAME)
+                Materialized.<String, Message, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(MESSAGE_STORE_NAME)
                         .withKeySerde(Serdes.String())
                         .withValueSerde(MessageSerde.instance()));
+        builder.table(
+                memberTopic,
+                Consumed.with(Serdes.String(), MemberSerde.instance()),
+                Materialized.<String, Member, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(MEMBER_STORE_NAME)
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(MemberSerde.instance()));
 
         Topology topology = builder.build();
         Properties props = KafkaPropertiesFactory.streamsProps(bootstrapServers, applicationId, stateDir);

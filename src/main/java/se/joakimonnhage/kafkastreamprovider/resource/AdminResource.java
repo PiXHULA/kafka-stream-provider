@@ -19,7 +19,7 @@ public class AdminResource {
     @Path("/reset-offsets")
     public Response resetOffsets() {
         kafkaStreamsManager.resetOffsets();
-        return Response.ok("{\"status\":\"offsets reset to 0, stream restarted\"}").build();
+        return Response.ok("{\"status\":\"offsets reset to 0 for configured topics, stream restarted\"}").build();
     }
 }
 

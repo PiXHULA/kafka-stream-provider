@@ -5,6 +5,7 @@ import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.streams.StreamsConfig;
+import se.joakimonnhage.kafkastreamprovider.kafka.avro.MemberSerializer;
 import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerde;
 import se.joakimonnhage.kafkastreamprovider.kafka.avro.MessageSerializer;
 
@@ -38,6 +39,14 @@ final class KafkaPropertiesFactory {
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, MessageSerializer.class.getName());
+        return props;
+    }
+
+    static Properties memberProducerProps(String bootstrapServers) {
+        Properties props = new Properties();
+        props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, MemberSerializer.class.getName());
         return props;
     }
 

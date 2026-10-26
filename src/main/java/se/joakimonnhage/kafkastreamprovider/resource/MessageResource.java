@@ -19,7 +19,7 @@ import java.util.List;
  * Kafka Streams app has consumed from it so far.
  */
 @Path("/messages")
-public class DataResource {
+public class MessageResource {
 
     @Inject
     KafkaStreamsManager kafkaStreamsManager;

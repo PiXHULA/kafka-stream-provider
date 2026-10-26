@@ -1,0 +1,12 @@
+{
+  "namespace": "se.joakimonnhage.kafkastreamprovider.avro",
+  "type": "record",
+  "name": "Member",
+  "doc": "A member produced to the new-member topic.",
+  "fields": [
+    { "name": "id", "type": "string", "doc": "Unique identifier for this member (used as the Kafka record key too)." },
+    { "name": "username", "type": "string", "doc": "Member username." },
+    { "name": "createdTimestamp", "type": "long", "doc": "Epoch millis at the time the member was created." }
+  ]
+}
+
