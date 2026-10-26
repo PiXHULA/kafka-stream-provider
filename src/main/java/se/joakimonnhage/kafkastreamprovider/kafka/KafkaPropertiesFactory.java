@@ -34,7 +34,7 @@ final class KafkaPropertiesFactory {
         return props;
     }
 
-    static Properties producerProps(String bootstrapServers) {
+    static Properties messageProducerProps(String bootstrapServers) {
         Properties props = new Properties();
         props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());

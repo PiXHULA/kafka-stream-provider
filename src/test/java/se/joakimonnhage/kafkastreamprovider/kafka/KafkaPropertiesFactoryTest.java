@@ -43,8 +43,8 @@ class KafkaPropertiesFactoryTest {
     }
 
     @Test
-    void producerPropsContainsExpectedConfig() {
-        Properties props = KafkaPropertiesFactory.producerProps("localhost:9092");
+    void messageProducerPropsContainsExpectedConfig() {
+        Properties props = KafkaPropertiesFactory.messageProducerProps("localhost:9092");
 
         assertEquals("localhost:9092", props.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG));
         assertEquals(StringSerializer.class.getName(), props.get(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG));
@@ -52,7 +52,7 @@ class KafkaPropertiesFactoryTest {
     }
 
     @Test
-    void memberProducerPropsContainsExpectedConfig() {
+    void memberMessageProducerPropsContainsExpectedConfig() {
         Properties props = KafkaPropertiesFactory.memberProducerProps("localhost:9092");
 
         assertEquals("localhost:9092", props.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG));

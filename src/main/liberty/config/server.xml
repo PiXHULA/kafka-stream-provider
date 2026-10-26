@@ -1,27 +1,26 @@
-<server description="kafka-stream-provider server" startTimeout="120">
+<server description="kafka-stream-provider server" startTimeout="505">
 
     <featureManager>
         <feature>restfulWS-3.1</feature>
         <feature>cdi-4.0</feature>
         <feature>jsonb-3.0</feature>
         <feature>jsonp-2.1</feature>
-        <feature>mpConfig-3.1</feature>
     </featureManager>
 
-<!--    <logging consoleLogLevel="INFO" messageFileName="messages.log" traceFileName="trace.log"/>-->
+    <logging consoleLogLevel="INFO" messageFileName="messages.log" traceFileName="trace.log"/>
 
     <httpEndpoint id="defaultHttpEndpoint"
                   httpPort="9080"
                   httpsPort="9443"
                   host="*"/>
 
-<!--    <cors domain="/"-->
-<!--          allowedOrigins="${env.allowedOrigins}"-->
-<!--          allowedMethods="GET,POST"-->
-<!--          allowCredentials="true"-->
-<!--          allowedHeaders="*"/>-->
+    <cors domain="/"
+          allowedOrigins="*"
+          allowedMethods="GET,POST"
+          allowCredentials="true"
+          allowedHeaders="*"/>
 
-<!--    <variable name="io.openliberty.enableGraphQLUI" value="false" />-->
+    <variable name="io.openliberty.enableGraphQLUI" value="false" />
 
     <webApplication location="kafka-stream-provider.war" contextRoot="/kafka_stream_provider"/>
 

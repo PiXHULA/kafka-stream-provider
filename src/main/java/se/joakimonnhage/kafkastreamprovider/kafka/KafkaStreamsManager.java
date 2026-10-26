@@ -22,7 +22,6 @@ import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,7 +33,6 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import jakarta.inject.Inject;
 import se.joakimonnhage.kafkastreamprovider.avro.Member;
 import se.joakimonnhage.kafkastreamprovider.avro.Message;
 import se.joakimonnhage.kafkastreamprovider.dto.StoredMember;
@@ -56,24 +54,14 @@ public class KafkaStreamsManager {
     private static final String MESSAGE_STORE_NAME = "messages-store";
     private static final String MEMBER_STORE_NAME = "members-store";
 
-    @Inject
-    @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
-    @Inject
-    @ConfigProperty(name = "kafka.message.topic")
     String messageTopic;
 
-    @Inject
-    @ConfigProperty(name = "kafka.member.topic")
     String memberTopic;
 
-    @Inject
-    @ConfigProperty(name = "kafka.application.id")
     String applicationId;
 
-    @Inject
-    @ConfigProperty(name = "kafka.state.dir")
     String stateDir;
 
     private KafkaProducer<String, Message> messageProducer;
@@ -82,10 +70,15 @@ public class KafkaStreamsManager {
 
     @PostConstruct
     void init() {
-//        stateDir = resolveStateDir(stateDir);
-//        System.out.println("stateDir: " + stateDir);
         try {
-            this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.producerProps(bootstrapServers));
+            AppConfig config = AppConfig.load();
+            this.bootstrapServers = config.bootstrapServers();
+            this.messageTopic = config.messageTopic();
+            this.memberTopic = config.memberTopic();
+            this.applicationId = config.applicationId();
+            this.stateDir = resolveStateDir(config.stateDir());
+
+            this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.messageProducerProps(bootstrapServers));
             this.memberProducer = new KafkaProducer<>(KafkaPropertiesFactory.memberProducerProps(bootstrapServers));
             this.startStreams();
         } catch (RuntimeException | Error e) {
@@ -100,7 +93,7 @@ public class KafkaStreamsManager {
 
     /**
      * {@code kafka.state.dir} is normally baked in at Maven build time by filtering
-     * {@code ${project.basedir}} into an absolute path (see microprofile-config.properties).
+     * {@code ${project.basedir}} into an absolute path (see config.properties).
      * That filtering only happens when the full Maven resources lifecycle runs - some IDE
      * "run"/"dev mode" integrations (e.g. certain Liberty Tools IntelliJ flows) deploy using
      * a build step that copies resources verbatim, without Maven property substitution. In
