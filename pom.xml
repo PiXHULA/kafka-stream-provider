@@ -16,13 +16,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <jakartaee.version>10.0.0</jakartaee.version>
-        <microprofile.version>7.1</microprofile.version>
         <kafka.version>3.7.0</kafka.version>
         <slf4j.version>1.7.36</slf4j.version>
         <openliberty.version>26.0.0.10</openliberty.version>
+        <openliberty.tools.version>3.12.4</openliberty.tools.version>
         <avro.version>1.11.3</avro.version>
         <jackson.version>2.16.0</jackson.version>
-        <maven.enforcer.version>3.5.0</maven.enforcer.version>
         <junit.version>5.11.3</junit.version>
         <mockito.version>5.20.0</mockito.version>
 
@@ -34,15 +33,6 @@
             <groupId>jakarta.platform</groupId>
             <artifactId>jakarta.jakartaee-api</artifactId>
             <version>${jakartaee.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- MicroProfile Config API, provided by Open Liberty at runtime -->
-        <dependency>
-            <groupId>org.eclipse.microprofile</groupId>
-            <artifactId>microprofile</artifactId>
-            <version>${microprofile.version}</version>
-            <type>pom</type>
             <scope>provided</scope>
         </dependency>
 
@@ -118,10 +108,17 @@
         </dependency>
     </dependencies>
 
+    <repositories>
+        <repository>
+            <id>sonatype</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </repository>
+    </repositories>
+
     <build>
         <finalName>kafka-stream-provider</finalName>
         <resources>
-            <!-- Enable Maven property filtering so ${project.basedir} in microprofile-config.properties
+            <!-- Enable Maven property filtering so ${project.basedir} in config.properties
                  is replaced with the absolute repo path, regardless of the working directory Liberty
                  actually runs the server from. -->
             <resource>
@@ -201,11 +198,40 @@
                 <version>3.2.5</version>
             </plugin>
 
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-resources-plugin</artifactId>-->
+<!--                <version>3.3.1</version>-->
+<!--                <configuration>-->
+<!--                    <encoding>${project.build.sourceEncoding}</encoding>-->
+<!--                    <propertiesEncoding>${project.build.sourceEncoding}</propertiesEncoding>-->
+<!--                </configuration>-->
+<!--            </plugin>-->
+
             <plugin>
                 <groupId>io.openliberty.tools</groupId>
                 <artifactId>liberty-maven-plugin</artifactId>
-                <version>3.12.4</version>
+                <version>${openliberty.tools.version}</version>
+
+                <executions>
+                    <execution>
+                        <id>prepare-server</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>create</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>install-features</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>install-feature</goal>
+                        </goals>
+                    </execution>
+                </executions>
+
                 <configuration>
+                    <serverStartTimeout>500</serverStartTimeout> <!-- set baseline >90s -->
                     <runtimeArtifact>
                         <groupId>io.openliberty</groupId>
                         <artifactId>openliberty-runtime</artifactId>

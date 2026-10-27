@@ -48,9 +48,10 @@ This compiles the app, starts Open Liberty, and deploys it with hot reload. The 
 listens on http://localhost:9080.
 
 Bootstrap servers/topic/application id default to the values in
-`src/main/resources/META-INF/microprofile-config.properties` and can be overridden
-with environment variables `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC`,
-`KAFKA_MEMBER_TOPIC`, `KAFKA_APPLICATION_ID`, `KAFKA_STATE_DIR`.
+`src/main/resources/META-INF/config.properties` and can be overridden
+with environment variables `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_MESSAGE_TOPIC`
+(or legacy `KAFKA_TOPIC`), `KAFKA_MEMBER_TOPIC`, `KAFKA_APPLICATION_ID`,
+`KAFKA_STATE_DIR`.
 
 The Kafka Streams state store (RocksDB files/checkpoints) is kept under `kafka-streams-state/`
 at the repo root (instead of the OS temp directory, which can be cleared at any time) - safe to
