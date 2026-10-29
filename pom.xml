@@ -21,11 +21,41 @@
         <openliberty.version>26.0.0.10</openliberty.version>
         <openliberty.tools.version>3.12.4</openliberty.tools.version>
         <avro.version>1.11.3</avro.version>
+        <confluent.version>7.7.12</confluent.version>
         <jackson.version>2.16.0</jackson.version>
         <junit.version>5.11.3</junit.version>
         <mockito.version>5.20.0</mockito.version>
 
     </properties>
+
+<!--    <repositories>-->
+<!--        <repository>-->
+<!--            <id>io-confluent</id>-->
+<!--            <name>io-confluent</name>-->
+<!--            <url>https://repo7.sebank.se:443/artifactory/maven-packages-confluent-io</url>-->
+<!--            <snapshots>-->
+<!--                <enabled>false</enabled>-->
+<!--            </snapshots>-->
+<!--        </repository>-->
+
+<!--        <repository>-->
+<!--            <id>confluent-io-cache</id>-->
+<!--            <name>confluent-io-cache</name>-->
+<!--            <url>https://repo7.sebank.se:443/artifactory/maven-packages-confluent-io-cache</url>-->
+<!--            <snapshots>-->
+<!--                <enabled>false</enabled>-->
+<!--            </snapshots>-->
+<!--        </repository>-->
+
+<!--        <repository>-->
+<!--            <id>maven-org-central</id>-->
+<!--            <name>maven-org-central</name>-->
+<!--            <url>https://repo7.sebank.se:443/artifactory/maven-org/</url>-->
+<!--            <snapshots>-->
+<!--                <enabled>false</enabled>-->
+<!--            </snapshots>-->
+<!--        </repository>-->
+<!--    </repositories>-->
 
     <dependencies>
         <!-- Jakarta EE 10 API, provided by Open Liberty at runtime -->
@@ -48,14 +78,25 @@
             <version>${kafka.version}</version>
         </dependency>
 
-        <!-- Avro, used to (de)serialize the Kafka message payload (id, timestamp, message).
-             No schema registry is deployed in this project's docker-compose, so plain binary
-             Avro (via hand-rolled Serializer/Deserializer) is used instead of Confluent's
-             KafkaAvroSerializer. -->
+        <!-- Avro model support for generated SpecificRecord classes. -->
         <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
             <version>${avro.version}</version>
+        </dependency>
+
+        <!-- Confluent serializers/serdes backed by Schema Registry. -->
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-avro-serializer</artifactId>
+            <version>${confluent.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-streams-avro-serde</artifactId>
+            <version>${confluent.version}</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- Keep jackson-core/annotations/databind on the same version to avoid classpath
@@ -107,13 +148,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <repositories>
-        <repository>
-            <id>sonatype</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </repository>
-    </repositories>
 
     <build>
         <finalName>kafka-stream-provider</finalName>

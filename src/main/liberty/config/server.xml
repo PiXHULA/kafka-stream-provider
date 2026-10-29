@@ -4,7 +4,7 @@
         <feature>restfulWS-3.1</feature>
         <feature>cdi-4.0</feature>
         <feature>jsonb-3.0</feature>
-<!--        <feature>jsonp-2.1</feature>-->
+        <feature>jsonp-2.1</feature>
     </featureManager>
 
     <logging consoleLogLevel="INFO" messageFileName="messages.log" traceFileName="trace.log"/>

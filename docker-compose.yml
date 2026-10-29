@@ -26,6 +26,18 @@ services:
       timeout: 10s
       retries: 10
 
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.0
+    container_name: schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: "schema-registry"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:9092"
+
 
   # Simple web UI to browse topics/messages - a lighter alternative to Confluent Control Center
   kafdrop:
@@ -33,6 +45,7 @@ services:
     container_name: kafdrop
     depends_on:
       - kafka
+      - schema-registry
     ports:
       - "9000:9000"
     environment:

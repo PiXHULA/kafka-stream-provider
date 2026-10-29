@@ -13,6 +13,7 @@ import se.joakimonnhage.kafkastreamprovider.dto.StoredMessage;
 import se.joakimonnhage.kafkastreamprovider.kafka.KafkaStreamsManager;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Lets you submit new data onto the Kafka topic, and read back everything the
@@ -20,6 +21,8 @@ import java.util.List;
  */
 @Path("/messages")
 public class MessageResource {
+
+    Logger LOGGER = Logger.getLogger(MessageResource.class.getName());
 
     @Inject
     KafkaStreamsManager kafkaStreamsManager;
@@ -45,6 +48,7 @@ public class MessageResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public List<StoredMessage> getAll() {
+        LOGGER.info("Start getAll");
         return kafkaStreamsManager.readAll();
     }
 }

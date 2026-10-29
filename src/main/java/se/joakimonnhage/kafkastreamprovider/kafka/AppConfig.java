@@ -18,7 +18,8 @@ final class AppConfig {
             "kafka.message.topic", new String[]{"KAFKA_MESSAGE_TOPIC", "KAFKA_TOPIC"},
             "kafka.member.topic", new String[]{"KAFKA_MEMBER_TOPIC"},
             "kafka.application.id", new String[]{"KAFKA_APPLICATION_ID"},
-            "kafka.state.dir", new String[]{"KAFKA_STATE_DIR"}
+            "kafka.state.dir", new String[]{"KAFKA_STATE_DIR"},
+            "kafka.schema.registry.url", new String[]{"KAFKA_SCHEMA_REGISTRY_URL"}
     );
 
     private final String bootstrapServers;
@@ -26,17 +27,20 @@ final class AppConfig {
     private final String memberTopic;
     private final String applicationId;
     private final String stateDir;
+    private final String schemaRegistryUrl;
 
     private AppConfig(String bootstrapServers,
                       String messageTopic,
                       String memberTopic,
                       String applicationId,
-                      String stateDir) {
+                      String stateDir,
+                      String schemaRegistryUrl) {
         this.bootstrapServers = bootstrapServers;
         this.messageTopic = messageTopic;
         this.memberTopic = memberTopic;
         this.applicationId = applicationId;
         this.stateDir = stateDir;
+        this.schemaRegistryUrl = schemaRegistryUrl;
     }
 
     static AppConfig load() {
@@ -58,7 +62,8 @@ final class AppConfig {
                 require(properties, "kafka.message.topic"),
                 require(properties, "kafka.member.topic"),
                 require(properties, "kafka.application.id"),
-                require(properties, "kafka.state.dir")
+                require(properties, "kafka.state.dir"),
+                require(properties, "kafka.schema.registry.url")
         );
     }
 
@@ -100,6 +105,10 @@ final class AppConfig {
 
     String stateDir() {
         return stateDir;
+    }
+
+    String schemaRegistryUrl() {
+        return schemaRegistryUrl;
     }
 }
 

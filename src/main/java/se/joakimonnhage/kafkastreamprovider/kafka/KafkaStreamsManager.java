@@ -3,7 +3,9 @@ package se.joakimonnhage.kafkastreamprovider.kafka;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -12,6 +14,7 @@ import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.TopicPartitionInfo;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StoreQueryParameters;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -22,14 +25,11 @@ import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
+import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -64,6 +64,11 @@ public class KafkaStreamsManager {
 
     String stateDir;
 
+    String schemaRegistryUrl;
+
+    @Inject
+    SchemaRegistryInitializer schemaRegistryInitializer;
+
     private KafkaProducer<String, Message> messageProducer;
     private KafkaProducer<String, Member> memberProducer;
     private KafkaStreams streams;
@@ -77,16 +82,25 @@ public class KafkaStreamsManager {
             this.memberTopic = config.memberTopic();
             this.applicationId = config.applicationId();
             this.stateDir = resolveStateDir(config.stateDir());
+            this.schemaRegistryUrl = config.schemaRegistryUrl();
 
-            this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.messageProducerProps(bootstrapServers));
-            this.memberProducer = new KafkaProducer<>(KafkaPropertiesFactory.memberProducerProps(bootstrapServers));
+            LOGGER.info(() -> String.format(
+                    "Kafka config resolved: bootstrapServers=%s, messageTopic=%s, memberTopic=%s, applicationId=%s, schemaRegistryUrl=%s, stateDir=%s",
+                    bootstrapServers, messageTopic, memberTopic, applicationId, schemaRegistryUrl, stateDir
+            ));
+
+            createConfiguredTopics();
+            schemaRegistryInitializer.registerSchemas(schemaRegistryUrl, messageTopic, memberTopic);
+
+            this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.messageProducerProps(bootstrapServers, schemaRegistryUrl));
+            this.memberProducer = new KafkaProducer<>(KafkaPropertiesFactory.memberProducerProps(bootstrapServers, schemaRegistryUrl));
             this.startStreams();
         } catch (RuntimeException | Error e) {
             // CDI/Weld swallows the real cause behind a generic "WELD-000049: Unable to invoke
             // void ...init()" message - log the actual exception (e.g. missing/incompatible Avro
             // classes, bad Kafka config, etc.) here so it's visible, then rethrow so startup still
             // fails loudly.
-            LOGGER.log(Level.SEVERE, "KafkaStreamsManager initialization failed", e);
+            LOGGER.log(Level.SEVERE, "KafkaStreamsManager initialization failed {}", e);
             throw e;
         }
     }
@@ -275,30 +289,75 @@ public class KafkaStreamsManager {
         startStreams();
     }
 
+    /**
+     * Creates the configured message/member topics if they do not already exist.
+     */
+    public void createConfiguredTopics() {
+        try (AdminClient admin = AdminClient.create(KafkaPropertiesFactory.adminProps(bootstrapServers))) {
+            Set<String> existing = admin.listTopics().names().get();
+            List<NewTopic> newTopics = new ArrayList<>();
+
+            if (!existing.contains(messageTopic)) {
+                newTopics.add(new NewTopic(messageTopic, 1, (short) 1));
+            }
+            if (!existing.contains(memberTopic)) {
+                newTopics.add(new NewTopic(memberTopic, 1, (short) 1));
+            }
+
+            if (newTopics.isEmpty()) {
+                LOGGER.info("Configured topics already exist: " + messageTopic + ", " + memberTopic);
+                return;
+            }
+
+            admin.createTopics(newTopics).all().get();
+            LOGGER.info("Created topics: " + newTopics.stream().map(NewTopic::name).toList());
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof TopicExistsException) {
+                LOGGER.info("Topic already exists while creating configured topics; continuing");
+                return;
+            }
+            throw new RuntimeException("Failed to create configured topics", e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create configured topics", e);
+        }
+    }
+
+    /**
+     * Lists currently available non-internal topics in the Kafka cluster.
+     */
+    public List<String> listTopics() {
+        try (AdminClient admin = AdminClient.create(KafkaPropertiesFactory.adminProps(bootstrapServers))) {
+            return admin.listTopics().names().get().stream().sorted().toList();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list topics", e);
+        }
+    }
+
     private void startStreams() {
         StreamsBuilder builder = new StreamsBuilder();
+        SpecificAvroSerde<Message> messageSerde = MessageSerde.instance(schemaRegistryUrl);
+        SpecificAvroSerde<Member> memberSerde = MemberSerde.instance(schemaRegistryUrl);
         builder.table(
                 messageTopic,
-                Consumed.with(Serdes.String(), MessageSerde.instance()),
+                Consumed.with(Serdes.String(), messageSerde),
                 Materialized.<String, Message, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(MESSAGE_STORE_NAME)
                         .withKeySerde(Serdes.String())
-                        .withValueSerde(MessageSerde.instance()));
+                        .withValueSerde(messageSerde));
         builder.table(
                 memberTopic,
-                Consumed.with(Serdes.String(), MemberSerde.instance()),
+                Consumed.with(Serdes.String(), memberSerde),
                 Materialized.<String, Member, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(MEMBER_STORE_NAME)
                         .withKeySerde(Serdes.String())
-                        .withValueSerde(MemberSerde.instance()));
+                        .withValueSerde(memberSerde));
 
         Topology topology = builder.build();
-        Properties props = KafkaPropertiesFactory.streamsProps(bootstrapServers, applicationId, stateDir);
+        Properties props = KafkaPropertiesFactory.streamsProps(bootstrapServers, applicationId, stateDir, schemaRegistryUrl);
         streams = new KafkaStreams(topology, props);
         streams.setUncaughtExceptionHandler(exception -> {
             LOGGER.log(Level.SEVERE, "Uncaught Kafka Streams exception", exception);
+            LOGGER.log(Level.SEVERE, "Root cause", exception.getCause());
             return org.apache.kafka.streams.errors.StreamsUncaughtExceptionHandler.StreamThreadExceptionResponse.REPLACE_THREAD;
         });
         streams.start();
     }
 }
-
-

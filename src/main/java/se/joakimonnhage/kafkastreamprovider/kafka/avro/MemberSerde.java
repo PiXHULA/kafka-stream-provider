@@ -1,19 +1,23 @@
 package se.joakimonnhage.kafkastreamprovider.kafka.avro;
 
-import org.apache.kafka.common.serialization.Serdes;
+import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
+import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import se.joakimonnhage.kafkastreamprovider.avro.Member;
+
+import java.util.Map;
 
 /**
  * Reusable Serde for Avro-generated {@link Member} values.
  */
-public final class MemberSerde extends Serdes.WrapperSerde<Member> {
+public final class MemberSerde {
 
-    public MemberSerde() {
-        super(new MemberSerializer(), new MemberDeserializer());
+    private MemberSerde() {
     }
 
-    public static MemberSerde instance() {
-        return new MemberSerde();
+    public static SpecificAvroSerde<Member> instance(String schemaRegistryUrl) {
+        SpecificAvroSerde<Member> serde = new SpecificAvroSerde<>();
+        serde.configure(Map.of(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl), false);
+        return serde;
     }
 }
 
