@@ -71,6 +71,7 @@ public class KafkaStreamsManager {
 
     private KafkaProducer<String, Message> messageProducer;
     private KafkaProducer<String, Member> memberProducer;
+    private KafkaProducer<String, String> magicStringProducer;
     private KafkaStreams streams;
 
     @PostConstruct
@@ -94,6 +95,7 @@ public class KafkaStreamsManager {
 
             this.messageProducer = new KafkaProducer<>(KafkaPropertiesFactory.messageProducerProps(bootstrapServers, schemaRegistryUrl));
             this.memberProducer = new KafkaProducer<>(KafkaPropertiesFactory.memberProducerProps(bootstrapServers, schemaRegistryUrl));
+            this.magicStringProducer = new KafkaProducer<>(KafkaPropertiesFactory.plainStringProducerProps(bootstrapServers));
             this.startStreams();
         } catch (RuntimeException | Error e) {
             // CDI/Weld swallows the real cause behind a generic "WELD-000049: Unable to invoke
@@ -151,6 +153,9 @@ public class KafkaStreamsManager {
         if (memberProducer != null) {
             memberProducer.close(Duration.ofSeconds(10));
         }
+        if (magicStringProducer != null) {
+            magicStringProducer.close(Duration.ofSeconds(10));
+        }
     }
 
     /**
@@ -182,6 +187,29 @@ public class KafkaStreamsManager {
             // buffer exhaustion) before the async callback above ever runs - make sure that's logged too.
             LOGGER.log(Level.SEVERE, "Failed to send message (synchronously) to topic " + messageTopic, e);
             throw new RuntimeException("Failed to send message to topic " + messageTopic, e);
+        }
+    }
+
+    /**
+     * Sends a raw String value to the same topic as normal messages to verify how
+     * the Avro-based stream reacts to non-Avro payloads.
+     */
+    public void produceMagicString(String messageText) {
+        String key = UUID.randomUUID().toString();
+        LOGGER.info("Producing magic string key=" + key + " to topic " + messageTopic);
+        try {
+            magicStringProducer.send(new ProducerRecord<>(messageTopic, key, messageText), (metadata, exception) -> {
+                if (exception != null) {
+                    LOGGER.log(Level.SEVERE, "Failed to send magic string to topic " + messageTopic, exception);
+                } else {
+                    LOGGER.info("Produced magic string key=" + key + " partition=" + metadata.partition()
+                            + " offset=" + metadata.offset());
+                }
+            });
+            magicStringProducer.flush();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to send magic string (synchronously) to topic " + messageTopic, e);
+            throw new RuntimeException("Failed to send magic string to topic " + messageTopic, e);
         }
     }
 

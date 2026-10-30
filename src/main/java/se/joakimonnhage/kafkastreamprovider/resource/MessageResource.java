@@ -45,6 +45,25 @@ public class MessageResource {
         return Response.accepted().build();
     }
 
+    @POST
+    @Path("/magic")
+    @Consumes(MediaType.TEXT_PLAIN)
+    public Response submitMagic(String message) {
+        if (message == null || message.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\":\"message must not be blank\"}")
+                    .build();
+        }
+        try {
+            kafkaStreamsManager.produceMagicString(message);
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("{\"error\":\"failed to produce magic message: " + e.getMessage() + "\"}")
+                    .build();
+        }
+        return Response.accepted().build();
+    }
+
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public List<StoredMessage> getAll() {

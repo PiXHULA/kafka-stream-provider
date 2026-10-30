@@ -2,13 +2,14 @@
 
 A small Kafka Streams app, running on Open Liberty, with REST endpoints to:
 
-- submit new data onto an input Kafka topic (`POST /api/messages`)
+- submit new data onto an input Kafka topic (`POST /kafka_stream_provider/api/messages`)
 - read back everything the Kafka Streams app has consumed so far, via an
-  interactive query against the Streams state store (`GET /api/messages`)
-- submit a new member to the `new-member` topic (`POST /api/members`)
-- read back all members consumed so far (`GET /api/members`)
+  interactive query against the Streams state store (`GET /kafka_stream_provider/api/messages`)
+- submit a raw String (non-Avro) to the message topic for serializer checks (`POST /kafka_stream_provider/api/messages/magic`)
+- submit a new member to the `new-member` topic (`POST /kafka_stream_provider/api/members`)
+- read back all members consumed so far (`GET /kafka_stream_provider/api/members`)
 - reset the stream's consumer group offsets back to 0 and restart it, so you
-  can replay the topic from the beginning (`POST /api/admin/reset-offsets`)
+  can replay the topic from the beginning (`POST /kafka_stream_provider/api/admin/reset-offsets`)
 
 ## Architecture
 
@@ -16,9 +17,9 @@ A small Kafka Streams app, running on Open Liberty, with REST endpoints to:
   `KafkaStreams` instance for the whole app lifetime.
 - The topology materializes two topics as `KTable`s into state stores:
   `messages-store` for message data and `members-store` for member data.
-- `GET /api/messages` and `GET /api/members` query those stores directly (Kafka Streams
+- `GET /kafka_stream_provider/api/messages` and `GET /kafka_stream_provider/api/members` query those stores directly (Kafka Streams
   "Interactive Queries").
-- `POST /api/admin/reset-offsets` stops the stream, uses the Kafka `AdminClient` to
+- `POST /kafka_stream_provider/api/admin/reset-offsets` stops the stream, uses the Kafka `AdminClient` to
   reset the committed offsets of the app's consumer group back to `0` for every
   partition of the topic, clears local state (`KafkaStreams#cleanUp`), and starts a
   fresh `KafkaStreams` instance - which then replays the topic from the start.
@@ -67,33 +68,46 @@ delete any time the app isn't running.
 > instead, which handles the JSON body correctly:
 
 ```powershell
-Invoke-RestMethod -Uri http://localhost:9080/api/messages -Method Post -ContentType "application/json" -Body '{"message":"hello kafka"}'
-Invoke-RestMethod -Uri http://localhost:9080/api/messages -Method Post -ContentType "application/json" -Body '{"message":"another message"}'
-Invoke-RestMethod -Uri http://localhost:9080/api/members -Method Post -ContentType "application/json" -Body '{"username":"alice"}'
-Invoke-RestMethod -Uri http://localhost:9080/api/members -Method Post -ContentType "application/json" -Body '{"username":"bob"}'
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/messages -Method Post -ContentType "application/json" -Body '{"message":"hello kafka"}'
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/messages -Method Post -ContentType "application/json" -Body '{"message":"another message"}'
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/members -Method Post -ContentType "application/json" -Body '{"username":"alice"}'
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/members -Method Post -ContentType "application/json" -Body '{"username":"bob"}'
 ```
+
+Send a non-Avro payload to the same topic (magic endpoint):
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/messages/magic -Method Post -ContentType "text/plain" -Body 'this is not avro'
+```
+
+Expected result for the magic call:
+
+- The HTTP request itself returns `202 Accepted` (the message is produced).
+- Kafka Streams then fails to deserialize that record as Avro and logs `Unknown magic byte!`.
+- Because deserialization errors are configured to continue, the app keeps running and that bad record is skipped.
 
 On macOS/Linux/bash, the original `curl` form works fine:
 
 ```bash
-curl -X POST http://localhost:9080/api/messages -H "Content-Type: application/json" -d '{"message":"hello kafka"}'
-curl -X POST http://localhost:9080/api/messages -H "Content-Type: application/json" -d '{"message":"another message"}'
-curl -X POST http://localhost:9080/api/members -H "Content-Type: application/json" -d '{"username":"alice"}'
-curl -X POST http://localhost:9080/api/members -H "Content-Type: application/json" -d '{"username":"bob"}'
+curl -X POST http://localhost:9080/kafka_stream_provider/api/messages -H "Content-Type: application/json" -d '{"message":"hello kafka"}'
+curl -X POST http://localhost:9080/kafka_stream_provider/api/messages -H "Content-Type: application/json" -d '{"message":"another message"}'
+curl -X POST http://localhost:9080/kafka_stream_provider/api/members -H "Content-Type: application/json" -d '{"username":"alice"}'
+curl -X POST http://localhost:9080/kafka_stream_provider/api/members -H "Content-Type: application/json" -d '{"username":"bob"}'
+curl -X POST http://localhost:9080/kafka_stream_provider/api/messages/magic -H "Content-Type: text/plain" -d 'this is not avro'
 ```
 
 Read back everything the stream has consumed:
 
 ```powershell
-Invoke-RestMethod -Uri http://localhost:9080/api/messages
-Invoke-RestMethod -Uri http://localhost:9080/api/members
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/messages
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/members
 ```
 
 Reset the stream's offsets to 0 and watch it replay everything from the beginning:
 
 ```powershell
-Invoke-RestMethod -Uri http://localhost:9080/api/admin/reset-offsets -Method Post
-Invoke-RestMethod -Uri http://localhost:9080/api/messages
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/admin/reset-offsets -Method Post
+Invoke-RestMethod -Uri http://localhost:9080/kafka_stream_provider/api/messages
 ```
 
 Browse the topic/messages directly in Kafdrop: http://localhost:9000
